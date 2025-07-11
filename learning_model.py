@@ -164,7 +164,6 @@ def click_submit_sequence(page):
 
 def restart_exam(page):
     print("[debug] Please manually restart/navigate to the exam start page.")
-    # No automatic clicking, user will do this manually
 
 def click_next_or_break(page):
     print("[debug] Trying to find Next button...")
@@ -178,6 +177,61 @@ def click_next_or_break(page):
         print("[debug] No Next button found, end of questions.")
         return False
 
+# --- Katalon-style initial login
+def perform_initial_login(page):
+    print("[debug] Performing automated login sequence...")
+
+    page.goto("https://ksp-7module.one.th/", timeout=60000)
+    time.sleep(1)
+
+    page.locator("xpath=//div[@id='app']/nav/div[3]/div/div/div[3]/button/span/h6").click()
+    time.sleep(1)
+
+    page.locator("xpath=//header[@id='menu1']/div/div/div/div[2]/a[3]/span/h6").click()
+    time.sleep(1)
+
+    page.locator("id=input-201").fill("0047841106017")
+    time.sleep(1)
+
+    page.locator("id=password").fill("Ednicewonder1984")
+    time.sleep(1)
+
+    page.locator("xpath=//div[@id='loginPage']/div/div/form/div[2]/div/div/div[2]/div/button").click()
+    time.sleep(1)
+
+    page.locator("xpath=//div[@id='loginPage']/div/div/form/button/span").click()
+    time.sleep(1)
+
+    page.locator("xpath=//div[@id='app']/nav/div[3]/div/div/div[3]/button/span/h6").click()
+    time.sleep(1)
+
+    page.locator("xpath=//header[@id='menu1']/div/div/div/div[2]/a[2]/span/h6").click()
+    time.sleep(1)
+
+    page.locator("div.v-responsive__content", has_text="Module 4").click()
+    time.sleep(1)
+
+    page.locator("xpath=//div[@id='courseDetail']/div/div/div[2]/div[2]/div/div[4]/div[3]/div/div/div/button/span/h6").click()
+    time.sleep(1)
+
+    page.locator("xpath=//div[@id='app']/div[2]/div/div[3]/div").click()
+    time.sleep(1)
+
+    page.locator("xpath=//div[@id='app']/div[2]/div/div[4]/div[2]/div[13]/button").click()
+    time.sleep(1)
+
+    page.locator("xpath=(.//*[normalize-space(text()) and normalize-space(.)='Final Exam Module 4 batch 2'])[1]/following::p[1]").click()
+    time.sleep(1)
+
+    page.locator("xpath=//div[@id='app']/div[2]/div/div/div/div/div[3]/div/div[2]/div[2]/div/div/div[2]/button/span/h4").click()
+    time.sleep(5)
+
+    page.goto("https://ksp-exam.alldemics.com/exam/4155", timeout=600000)
+    time.sleep(2)
+    page.locator("xpath=//div[@id='app']/div/main/div/div/div[2]/div/div/div/div/header/div/div/div[4]/button/span")
+    print("[debug] Login sequence completed.")
+
+
 # --- Main logic
 def run_brute_force():
     memory = load_memory()
@@ -185,10 +239,8 @@ def run_brute_force():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False, channel="chrome")
         page = browser.new_page()
-        page.goto("https://ksp-7module.one.th", timeout=60000)
-        input_msg = "[debug] Please login manually then press ENTER to start..."
-        send_telegram_message("🔔 User input required: Please login to the exam site and press ENTER in the script.")
-        input(input_msg)
+
+        perform_initial_login(page)
 
         current_question = 0
         while True:
@@ -226,10 +278,9 @@ Options:
 
                 answer = memory[q_hash]["best_answer"]
 
-                # perturbation on single question
                 if question_count == current_question:
                     next_best = debate_alternative_answer(TOP_MODELS, question_text, choices, answer)
-                    if next_best: 
+                    if next_best:
                         print(f"[debug] Trying alternative answer {next_best} for Q{question_count+1}")
                         answer = next_best
 
@@ -237,15 +288,13 @@ Options:
                 time.sleep(0.5)
                 chosen_answers[q_hash] = (question_text, choices, answer)
 
-                # Try clicking Next button, if none found then break to manual scoring
                 if not click_next_or_break(page):
                     print("[debug] No Next button found, assuming all questions answered.")
-                    break  # exit question loop to ask for manual score
+                    break
 
                 question_count += 1
                 time.sleep(1)
 
-            # After question loop ends (all questions answered or Next not found):
             while True:
                 try:
                     score_msg = "[debug] Enter total score for this run (0-30): "
@@ -268,7 +317,6 @@ Options:
                 best = max(scores_per_answer, key=lambda x: sum(scores_per_answer[x])/len(scores_per_answer[x]))
                 mem["best_answer"] = best
 
-                # Refined summary
                 avg_score_for_ans = sum(scores_per_answer[ans])/len(scores_per_answer[ans]) if scores_per_answer[ans] else 0
                 avg_score_best = sum(scores_per_answer[best])/len(scores_per_answer[best]) if scores_per_answer[best] else 0
                 status = "cracked" if ans == best else "not cracked"
@@ -294,7 +342,6 @@ Options:
                 print("🎉 Perfect score found!")
                 break
 
-            # Automatically start next run after scoring, no manual navigation prompt
             current_question = (current_question+1)%TOTAL_QUESTIONS
 
 if __name__=="__main__":
