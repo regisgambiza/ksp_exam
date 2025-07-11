@@ -6,7 +6,7 @@ import time
 import hashlib
 import requests
 from collections import Counter
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError
 
 # Config
 MODEL_WEIGHTS = {
@@ -19,12 +19,10 @@ MODEL_WEIGHTS = {
 TOP_MODELS = ["llama3.1:8b", "mistral:7b-instruct-q4_0", "qwen2:7b-instruct-q4_0"]
 OLLAMA_URL = "http://localhost:11434/api/generate"
 TIMEOUT = 90
-
 MEMORY_FILE = "question_memory.json"
 CSV_FILE = "questions_log.csv"
 TOTAL_QUESTIONS = 30
 RETRY_WAIT_SECONDS = 20
-
 TELEGRAM_BOT_TOKEN = "7980048285:AAGs8i5wU3PP0rU5eux7KBsACQaYtTxI_aQ"
 TELEGRAM_CHAT_ID = "8149536064"
 
@@ -162,9 +160,6 @@ def click_submit_sequence(page):
     page.locator("div.v-list-item").first.click()
     print("[debug] Completed navigation to score page")
 
-def restart_exam(page):
-    print("[debug] Please manually restart/navigate to the exam start page.")
-
 def click_next_or_break(page):
     print("[debug] Trying to find Next button...")
     try:
@@ -177,60 +172,105 @@ def click_next_or_break(page):
         print("[debug] No Next button found, end of questions.")
         return False
 
-# --- Katalon-style initial login
+def complete_exam_and_get_score(page):
+    print("[debug] Completing exam and extracting score...")
+    try:
+        # Click sequence to navigate to the score pop-up
+        page.locator("xpath=//div[@id='app']/div/main/div/div/div[2]/div/div/div[2]/div[3]/div/nav/div/div/div/div[2]/div[2]/div/button/span").click()
+        page.wait_for_timeout(500)
+        page.locator("xpath=//div[@id='app']/div[3]/div/div/div[3]/button[2]/span").click()
+        page.wait_for_timeout(500)
+        
+        # Extract score from the pop-up
+        score_element = page.locator("xpath=(.//*[normalize-space(text()) and normalize-space(.)='Stop'])[1]/following::div[2]")
+        score_element.wait_for(state="visible", timeout=3000)
+        score_text = score_element.inner_text()
+        score_match = re.search(r'\d+', score_text)
+        if score_match:
+            total_score = int(score_match.group(0))
+            if 0 <= total_score <= TOTAL_QUESTIONS:
+                print(f"[debug] Extracted score: {total_score}")
+                send_telegram_message(f"🔔 Run completed with score: {total_score}/{TOTAL_QUESTIONS}")
+                return total_score
+            else:
+                raise ValueError(f"Invalid score extracted: {total_score}")
+        else:
+            raise ValueError("Could not extract score from pop-up")
+    except TimeoutError:
+        print("[error] Failed to extract score from pop-up due to timeout")
+        send_telegram_message("⚠️ Failed to extract score from pop-up due to timeout")
+        raise
+    except Exception as e:
+        print(f"[error] Error during score extraction: {e}")
+        send_telegram_message(f"⚠️ Error during score extraction: {e}")
+        raise
+
+def restart_exam(page):
+    print("[debug] Restarting exam...")
+    try:
+        # Navigate back to course page
+        page.goto("https://ksp-7module.one.th/course/97083ed2-2b6c-47b1-8864-71dbe15a7514/learn", timeout=60000)
+        page.wait_for_timeout(1000)
+        
+        # Click sequence to restart exam
+        page.locator("xpath=//div[@id='app']/div[2]/div/div[3]/div").click()
+        page.wait_for_timeout(500)
+        page.locator("xpath=//div[@id='app']/div[2]/div/div[4]/div[2]/div[13]/button").click()
+        page.wait_for_timeout(500)
+        page.locator("xpath=(.//*[normalize-space(text()) and normalize-space(.)='Final Exam Module 4 batch 2'])[1]/following::p[1]").click()
+        page.wait_for_timeout(500)
+        page.locator("xpath=//div[@id='app']/div[2]/div/div/div/div/div[3]/div/div[2]/div[2]/div/div/div[2]/button/span/h4").click()
+        page.wait_for_timeout(2000)
+        
+        # Open exam page
+        page.goto("https://ksp-exam.alldemics.com/exam/4155", timeout=60000)
+        page.wait_for_timeout(2000)
+        print("[debug] Exam restarted successfully")
+    except TimeoutError:
+        print("[error] Failed to restart exam due to timeout")
+        send_telegram_message("⚠️ Failed to restart exam due to timeout")
+        raise
+    except Exception as e:
+        print(f"[error] Failed to restart exam: {e}")
+        send_telegram_message(f"⚠️ Failed to restart exam: {e}")
+        raise
+
 def perform_initial_login(page):
     print("[debug] Performing automated login sequence...")
-
     page.goto("https://ksp-7module.one.th/", timeout=60000)
     time.sleep(1)
-
     page.locator("xpath=//div[@id='app']/nav/div[3]/div/div/div[3]/button/span/h6").click()
     time.sleep(1)
-
     page.locator("xpath=//header[@id='menu1']/div/div/div/div[2]/a[3]/span/h6").click()
     time.sleep(1)
-
     page.locator("id=input-201").fill("0047841106017")
     time.sleep(1)
-
     page.locator("id=password").fill("Ednicewonder1984")
     time.sleep(1)
-
     page.locator("xpath=//div[@id='loginPage']/div/div/form/div[2]/div/div/div[2]/div/button").click()
     time.sleep(1)
-
     page.locator("xpath=//div[@id='loginPage']/div/div/form/button/span").click()
     time.sleep(1)
-
     page.locator("xpath=//div[@id='app']/nav/div[3]/div/div/div[3]/button/span/h6").click()
     time.sleep(1)
-
     page.locator("xpath=//header[@id='menu1']/div/div/div/div[2]/a[2]/span/h6").click()
     time.sleep(1)
-
     page.locator("div.v-responsive__content", has_text="Module 4").click()
     time.sleep(1)
-
     page.locator("xpath=//div[@id='courseDetail']/div/div/div[2]/div[2]/div/div[4]/div[3]/div/div/div/button/span/h6").click()
     time.sleep(1)
-
     page.locator("xpath=//div[@id='app']/div[2]/div/div[3]/div").click()
     time.sleep(1)
-
     page.locator("xpath=//div[@id='app']/div[2]/div/div[4]/div[2]/div[13]/button").click()
     time.sleep(1)
-
     page.locator("xpath=(.//*[normalize-space(text()) and normalize-space(.)='Final Exam Module 4 batch 2'])[1]/following::p[1]").click()
     time.sleep(1)
-
     page.locator("xpath=//div[@id='app']/div[2]/div/div/div/div/div[3]/div/div[2]/div[2]/div/div/div[2]/button/span/h4").click()
     time.sleep(5)
-
     page.goto("https://ksp-exam.alldemics.com/exam/4155", timeout=600000)
     time.sleep(2)
     page.locator("xpath=//div[@id='app']/div/main/div/div/div[2]/div/div/div/div/header/div/div/div[4]/button/span")
     print("[debug] Login sequence completed.")
-
 
 # --- Main logic
 def run_brute_force():
@@ -239,20 +279,16 @@ def run_brute_force():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False, channel="chrome")
         page = browser.new_page()
-
         perform_initial_login(page)
-
         current_question = 0
         while True:
-            run_number +=1
+            run_number += 1
             print(f"\n=== Run {run_number} ===")
             question_count = 0
             chosen_answers = {}
-
             while question_count < TOTAL_QUESTIONS:
                 question_text, choices = extract_from_page(page)
                 q_hash = question_hash(question_text)
-
                 if q_hash not in memory:
                     print(f"[debug] New question detected, running models...")
                     votes = []
@@ -269,56 +305,38 @@ Options:
                         number, confidence = extract_number_and_confidence(text)
                         votes.append((model, number, confidence))
                     weighted = []
-                    for m,n,c in votes:
-                        weighted.extend([n]*int(MODEL_WEIGHTS.get(m,1)*(c*2+1)))
+                    for m, n, c in votes:
+                        weighted.extend([n] * int(MODEL_WEIGHTS.get(m, 1) * (c * 2 + 1)))
                     counter = Counter(weighted)
                     best = counter.most_common(1)[0][0]
                     print(f"[debug] Initial consensus picked answer: {best}")
                     memory[q_hash] = {"best_answer": best, "tries": []}
-
                 answer = memory[q_hash]["best_answer"]
-
                 if question_count == current_question:
                     next_best = debate_alternative_answer(TOP_MODELS, question_text, choices, answer)
                     if next_best:
                         print(f"[debug] Trying alternative answer {next_best} for Q{question_count+1}")
                         answer = next_best
-
                 click_answer(page, answer)
                 time.sleep(0.5)
                 chosen_answers[q_hash] = (question_text, choices, answer)
-
                 if not click_next_or_break(page):
                     print("[debug] No Next button found, assuming all questions answered.")
                     break
-
                 question_count += 1
                 time.sleep(1)
-
-            while True:
-                try:
-                    score_msg = "[debug] Enter total score for this run (0-30): "
-                    send_telegram_message("🔔 User input required: Please enter the total score for this run in the script.")
-                    total_score = int(input(score_msg))
-                    if 0 <= total_score <= TOTAL_QUESTIONS:
-                        break
-                    else:
-                        print("[debug] Invalid score, enter number between 0 and 30.")
-                except ValueError:
-                    print("[debug] Invalid input, please enter an integer.")
-
+            total_score = complete_exam_and_get_score(page)
             for idx, (q_hash, (q_text, opts, ans)) in enumerate(chosen_answers.items(), start=1):
                 append_to_csv(run_number, q_hash, q_text, opts, ans, total_score)
                 mem = memory[q_hash]
-                mem.setdefault("tries",[]).append({"answer":ans,"score":total_score})
+                mem.setdefault("tries", []).append({"answer": ans, "score": total_score})
                 scores_per_answer = {}
                 for tr in mem["tries"]:
-                    scores_per_answer.setdefault(tr["answer"],[]).append(tr["score"])
-                best = max(scores_per_answer, key=lambda x: sum(scores_per_answer[x])/len(scores_per_answer[x]))
+                    scores_per_answer.setdefault(tr["answer"], []).append(tr["score"])
+                best = max(scores_per_answer, key=lambda x: sum(scores_per_answer[x]) / len(scores_per_answer[x]))
                 mem["best_answer"] = best
-
-                avg_score_for_ans = sum(scores_per_answer[ans])/len(scores_per_answer[ans]) if scores_per_answer[ans] else 0
-                avg_score_best = sum(scores_per_answer[best])/len(scores_per_answer[best]) if scores_per_answer[best] else 0
+                avg_score_for_ans = sum(scores_per_answer[ans]) / len(scores_per_answer[ans]) if scores_per_answer[ans] else 0
+                avg_score_best = sum(scores_per_answer[best]) / len(scores_per_answer[best]) if scores_per_answer[best] else 0
                 status = "cracked" if ans == best else "not cracked"
                 explanation = (
                     "Current answer leads to best average score."
@@ -329,20 +347,18 @@ Options:
                     "move on to next question." if status == "cracked"
                     else "will try next best answer for this question in future runs."
                 )
-
                 print(f"[summary] Question being cracked: {idx}")
                 print(f"[summary] Status: {status}")
                 print(f"[summary] Explanation: {explanation}")
                 print(f"[summary] What's next: {whats_next}")
-
             save_memory(memory)
-
             print(f"[INFO] Run {run_number} completed with score {total_score}/30")
-            if total_score==30:
+            if total_score == 30:
                 print("🎉 Perfect score found!")
+                send_telegram_message("🎉 Perfect score of 30/30 achieved!")
                 break
+            current_question = (current_question + 1) % TOTAL_QUESTIONS
+            restart_exam(page)
 
-            current_question = (current_question+1)%TOTAL_QUESTIONS
-
-if __name__=="__main__":
+if __name__ == "__main__":
     run_brute_force()
