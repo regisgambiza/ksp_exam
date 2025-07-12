@@ -1,0 +1,12 @@
+run,question_hash,question_text,options,picked_answer
+1,hash1,Question text 1,Option1|Option2|Option3|Option4,1
+2,hash1,Question text 1,Option1|Option2|Option3|Option4,2
+3,hash1,Question text 1,Option1|Option2|Option3|Option4,3
+4,hash1,Question text 1,Option1|Option2|Option3|Option4,4
+5,hash1,Question text 1,Option1|Option2|Option3|Option4,1
+6,hash1,Question text 1,Option1|Option2|Option3|Option4,2
+7,hash1,Question text 1,Option1|Option2|Option3|Option4,3
+8,hash1,Question text 1,Option1|Option2|Option3|Option4,4
+9,hash1,Question text 1,Option1|Option2|Option3|Option4,1
+10,hash1,Question text 1,Option1|Option2|Option3|Option4,2
+11,hash1,Question text 1,Option1|Option2|Option3|Option4,3
